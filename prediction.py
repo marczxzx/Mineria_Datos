@@ -37,19 +37,18 @@ def get_recommendations(
     target_user: int,
     user_ratings: dict,
     movie_titles: dict,
-    k: int = 30,
-    min_common: int = 5,
-    metric: str = "pearson",
-    top_n: int = 10
+    neighbors: list[tuple], 
+    top_n: int = 10,
+    threshold: float = 3.0
 ) -> list[tuple[str, float]]:
     """
     Genera las top_N recomendaciones para un usuario.
     Retorna: [(título_película, predicción), ...]
     """
     # 1. Obtener vecinos más similares
-    neighbors = find_similar_users(
-        target_user, user_ratings, metric=metric, k=k, min_common=min_common
-    )
+    # neighbors = find_similar_users(
+    #     target_user, user_ratings, metric=metric, k=k, min_common=min_common
+    # )
 
     if not neighbors:
         print("No se encontraron vecinos válidos.")
@@ -66,7 +65,7 @@ def get_recommendations(
     predictions = []
     for movie_id in unseen_movies:
         pred = predict_rating_mean_centered(target_user, movie_id, user_ratings, neighbors)
-        if pred > 0:  # Solo guardar si hay predicción válida
+        if pred > threshold:  # Solo guardar si hay predicción válida
             title = movie_titles.get(movie_id, f"ID: {movie_id}")
             predictions.append((title, pred))
 

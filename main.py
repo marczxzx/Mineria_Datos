@@ -4,6 +4,10 @@ from knn import find_similar_users
 from prediction import get_recommendations
 from visualization import print_results, compare_metrics, print_recommendations
 
+from influencer import menu_influencer
+from influence import run_influence_report
+from influencer import _get_influencer_id
+from data_loader import build_user_ratings
 # ─────────────────────────────────────────────
 # 5. EJECUCIÓN PRINCIPAL
 # ─────────────────────────────────────────────
@@ -24,10 +28,9 @@ if __name__ == "__main__":
     THRESHOLD   = 3.0 
     MOVIES_PATH = "ml-latest-small/movies.csv"    # Ruta al archivo de MovieLens-Movies 100K
     DATA_PATH   = "ml-latest-small/ratings.csv"   # Ruta al archivo de MovieLens-Ratings 100K
-    TARGET_USER = 1         # Usuario del que queremos encontrar vecinos
-    K           = 10        # Número de vecinos a encontrar
-    MIN_COMMON  = 2
-             # Mínimo de películas en común
+    TARGET_USER = 10        # Usuario del que queremos encontrar vecinos
+    K           = 50        # Número de vecinos a encontrar
+    MIN_COMMON  = 3         # Mínimo de películas en común
     # ───────────────────────────────────────────────
 
     # ─── Cargando Datos ───────────────────────────────────
@@ -65,13 +68,41 @@ if __name__ == "__main__":
             target_user=TARGET_USER,
             user_ratings=user_ratings,
             movie_titles=movie_titles,
-            k=K,
-            min_common=MIN_COMMON,
-            metric=metric,  # ← Mejor opción
-            top_n=10
+            neighbors=results,
+            top_n=10,
+            threshold=THRESHOLD
         )
 
         print_recommendations(TARGET_USER, recs, metric, THRESHOLD)
+
+    # ── Menú Influencer ────────────────────────────────────────
+    # menu_influencer(user_ratings, movie_titles)
+    
+    # Asegúrate de inyectar al influencer en user_ratings primero
+    influencer_id = _get_influencer_id(user_ratings)
+
+    if influencer_id:
+        # Cargar sus ratings al dict en memoria
+        import pandas as pd
+        df_inf = pd.read_csv("influencer.csv")
+        df_inf = df_inf[df_inf["movieId"] != -1]
+        user_ratings[influencer_id] = {
+            int(r.movieId): float(r.rating)
+            for r in df_inf.itertuples()
+        }
+
+        run_influence_report(
+            target_user   = TARGET_USER,
+            user_ratings  = user_ratings,
+            movie_titles  = movie_titles,
+            influencer_id = influencer_id,
+            alpha         = 0.3,       # 30% de fuerza de influencia
+            boost_factor  = 1.5,       # influencer pesa 50% más en KNN
+            k             = K,
+            min_common    = MIN_COMMON,
+            top_n         = 10,
+            threshold     = 3.0,
+        )
 
     # for metric in metrics_similarity:
     #     results = find_similar_users(
