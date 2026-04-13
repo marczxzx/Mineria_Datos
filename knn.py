@@ -20,7 +20,7 @@ def find_similar_users(
     target_user : int
         ID del usuario del que queremos encontrar vecinos.
     user_ratings : dict
-        Diccionario { userId: { movieId: rating } }
+        Diccionario { userId: { movieId: rating ... } ... }
     metric : str
         Métrica a usar: 'cosine', 'euclidean' o 'pearson'
     k : int

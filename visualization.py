@@ -8,9 +8,9 @@ from knn import find_similar_users
 def print_results(target_user: int, results: list, metric: str):
     metric_labels = {
         "cosine":    "Similitud Coseno",
-        "euclidean": "Similitud Euclidiana (1/1+d)",
+        "euclidean": "Similitud Euclidiana",
         "pearson":   "Correlación de Pearson",
-        "manhattan":  "Similitud Manhattan (1/1+d)",
+        "manhattan":  "Similitud Manhattan",
     }
     label = metric_labels[metric]
 
@@ -21,9 +21,12 @@ def print_results(target_user: int, results: list, metric: str):
     print(f"  {'─'*55}")
 
     for i, (user, sim, common) in enumerate(results, 1):
-        bar = "█" * int(abs(sim) * 20)
+        if i == 10:
+            break
+        # bar = "█" * int(abs(sim) * 20)
         sign = "+" if sim >= 0 else "-"
-        print(f"  {i:<4} Usuario {user:<5}  {sign}{abs(sim):.4f}  {bar:<22}  {common} películas")
+        # print(f"  {i:<4} Usuario {user:<5}  {sign}{abs(sim):.4f}  {bar:<22}  {common} películas")
+        print(f"  {i:<4} Usuario {user:<5}  {sign}{abs(sim):.4f}  {common:>22} películas")
 
     print(f"{'─'*60}\n")
 
@@ -48,6 +51,7 @@ def compare_metrics(target_user: int, user_ratings: dict, k: int = 5,min: int = 
         m = f"Usuario {all_results['manhattan'][i]}" if i < len(all_results['manhattan']) else "—"
         print(f"  {i+1:<4} {c:<14} {e:<14} {p:<14} {m}")
     print()
+
 
 def print_recommendations(target_user: int, recs: list[tuple], metric: str, threshold: float):
     """Imprime las recomendaciones finales en formato tabla."""

@@ -1,47 +1,56 @@
 import numpy as np
-import pandas as pd
-from data_loader import load_movielens, build_user_ratings
+from data_loader import load_movielens, build_user_ratings, load_movie_titles
 from knn import find_similar_users
 from prediction import get_recommendations
 from visualization import print_results, compare_metrics, print_recommendations
 
-def load_movie_titles(movies_path: str) -> dict:
-    """Carga título -> movieId (opcional, para legibilidad)"""
-    try:
-        df = pd.read_csv(movies_path, sep=",", encoding="latin-1")
-        return dict(zip(df["movieId"], df["title"]))
-    except FileNotFoundError:
-        print("⚠️ No se encontró movies.csv. Se usarán IDs numéricos.")
-        return {}
 # ─────────────────────────────────────────────
 # 5. EJECUCIÓN PRINCIPAL
 # ─────────────────────────────────────────────
 
 if __name__ == "__main__":
+    users = {1: {1: 3.5, 2: 2.0, 3: 4.5, 4: 5.0, 5: 1.5, 6: 2.5, 7: 2.0},
+         2:{1: 2.0, 2: 3.5, 8: 4.0, 4: 2.0, 5: 3.5, 7: 3.0},
+         3: {1: 5.0, 2: 1.0, 8: 1.0, 3: 3.0, 4: 5, 5: 1.0},
+         4: {1: 3.0, 2: 4.0, 8: 4.5, 4: 3.0, 5: 4.5, 6: 4.0, 7: 2.0},
+         5: {2: 4.0, 8: 1.0, 3: 4.0, 6: 4.0, 7: 1.0},
+         6:  {2: 4.5, 8: 4.0, 3: 5.0, 4: 5.0, 5: 4.5, 6: 4.0, 7: 4.0},
+         7: {1: 5.0, 2: 2.0, 3: 3.0, 4: 5.0, 5: 4.0, 6: 5.0},
+         8: {1: 3.0, 3: 5.0, 4: 4.0, 5: 2.5, 6: 3.0}
+        }
+    musica = {1:"Blues Traveler",2:"Broken Bells",3:"Norah Jones", 4:"Phoenix",5:"Slightly Stoopid",6:"The Strokes",7:"Vampire Weekend",8:8}
 
-    # ── Configuración ──────────────────────────
-    THRESHOLD   = 3.5 
-    MOVIES_PATH = "ml-latest-small/movies.csv"
-    DATA_PATH   = "ml-latest-small/ratings.csv"   # Ruta al archivo de MovieLens 100K
-    TARGET_USER = 10         # Usuario del que queremos encontrar vecinos
-    K           = 10         # Número de vecinos a encontrar
-    MIN_COMMON  = 3          # Mínimo de películas en común
-    # ───────────────────────────────────────────
+    # ── Configuración ──────────────────────────────
+    THRESHOLD   = 3.0 
+    MOVIES_PATH = "ml-latest-small/movies.csv"    # Ruta al archivo de MovieLens-Movies 100K
+    DATA_PATH   = "ml-latest-small/ratings.csv"   # Ruta al archivo de MovieLens-Ratings 100K
+    TARGET_USER = 1         # Usuario del que queremos encontrar vecinos
+    K           = 10        # Número de vecinos a encontrar
+    MIN_COMMON  = 2
+             # Mínimo de películas en común
+    # ───────────────────────────────────────────────
 
+    # ─── Cargando Datos ───────────────────────────────────
     print("Cargando dataset MovieLens...")
     df = load_movielens(DATA_PATH)
     print(f"  {len(df):,} calificaciones | {df['userId'].nunique()} usuarios | {df['movieId'].nunique()} películas")
 
     print("\nConstruyendo estructura de datos...")
-    user_ratings = build_user_ratings(df)
+    user_ratings = build_user_ratings(df) # { userId: { movieId: rating, ... }, ... }
     movie_titles = load_movie_titles(MOVIES_PATH)
+    # ───────────────────────────────────────────────────────
 
-    target_info = user_ratings[TARGET_USER]
+    # ─── Informacion del Usuario objetivo ─────────────────
+    target_info = user_ratings[TARGET_USER] # { movieId: rating, ... }
     avg_rating = np.mean(list(target_info.values()))
     print(f"\nUsuario {TARGET_USER}: {len(target_info)} películas calificadas | promedio: {avg_rating:.2f} ★")
+    # ──────────────────────────────────────────────────────
 
     # ── Resultados por cada métrica ─────────────
-    for metric in ["cosine", "euclidean", "pearson", "manhattan"]:
+    metrics_similarity = ["cosine", "euclidean", "pearson", "manhattan"]
+    #metrics_similarity = ["pearson"]
+
+    for metric in metrics_similarity:
         results = find_similar_users(
             target_user=TARGET_USER,
             user_ratings=user_ratings,
@@ -51,53 +60,38 @@ if __name__ == "__main__":
         )
         print_results(TARGET_USER, results, metric)
 
+        # Generar recomendaciones
         recs = get_recommendations(
             target_user=TARGET_USER,
             user_ratings=user_ratings,
-            neighbors=results,
-            threshold=THRESHOLD,
-            top_n=10,
-            min_neighbors_for_pred=3,
-            movie_titles=movie_titles
+            movie_titles=movie_titles,
+            k=K,
+            min_common=MIN_COMMON,
+            metric=metric,  # ← Mejor opción
+            top_n=10
         )
-        
-        if recs:
-            print_recommendations(TARGET_USER, recs, metric, THRESHOLD)
-        else:
-            print(f"No se encontraron películas con predicción > {THRESHOLD} usando {metric}.\n")
+
+        print_recommendations(TARGET_USER, recs, metric, THRESHOLD)
+
+    # for metric in metrics_similarity:
+    #     results = find_similar_users(
+    #         target_user= 1,
+    #         user_ratings=users,
+    #         metric=metric,
+    #         k=8,
+    #         min_common=0,
+    #     )
+    #     print_results(TARGET_USER, results, metric)
+    #     recs = get_recommendations(
+    #         target_user=1,
+    #         user_ratings=users,
+    #         movie_titles=musica,
+    #         k=8,
+    #         min_common=0,
+    #         metric=metric,  # ← Mejor opción
+    #         top_n=7
+    #     )
+
+    #     print_recommendations(TARGET_USER, recs, metric, THRESHOLD)
     # ── Comparación lado a lado ─────────────────
-    compare_metrics(TARGET_USER, user_ratings, k=5,min=MIN_COMMON)
-
-
-    # neighbors = find_similar_users(
-    #     target_user=TARGET_USER,
-    #     user_ratings=user_ratings,
-    #     metric="pearson",
-    #     k=K,
-    #     min_common=MIN_COMMON
-    # )
-    # print_results(TARGET_USER, neighbors, "pearson")
-
-    # # 2. Generar recomendaciones
-    # print(f"Generando recomendaciones (umbral > {THRESHOLD})...")
-    # recommendations = get_recommendations(
-    #     target_user=TARGET_USER,
-    #     user_ratings=user_ratings,
-    #     neighbors=neighbors,
-    #     threshold=THRESHOLD,
-    #     top_n=10,
-    #     min_neighbors_for_pred=3,
-    #     movie_titles=movie_titles
-    # )
-
-    # # 3. Mostrar resultados
-    # print(f"\n{'='*70}")
-    # print(f"  TOP {len(recommendations)} RECOMENDACIONES PARA USUARIO {TARGET_USER}")
-    # print(f"{'='*70}")
-    # print(f"  {'#':<4} {'Película':<45} {'Predicción':<10}")
-    # print(f"  {'-'*65}")
-    # for i, (title, pred) in enumerate(recommendations, 1):
-    #     # Barra de confianza
-    #     bar = "█" * int(pred * 4)
-    #     print(f"  {i:<4} {title:<45} {pred:.2f} ★  {bar}")
-    # print(f"{'='*70}\n")
+    # compare_metrics(TARGET_USER, user_ratings, k=5,min=MIN_COMMON)

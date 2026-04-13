@@ -1,95 +1,75 @@
+# prediction.py
 import numpy as np
+from knn import find_similar_users
 
-def predict_ratings_for_user(
+def predict_rating_mean_centered(
     target_user: int,
+    movie_id: int,
     user_ratings: dict,
-    neighbors: list[tuple],
-    min_neighbors_for_pred: int = 3
-) -> dict:
+    neighbors: list[tuple]
+) -> float:
     """
-    Predice calificaciones para películas NO vistas por el usuario objetivo.
-    Fórmula estándar de Filtrado Colaborativo basado en Usuario:
-        r̂_u,i = ū + [ Σ sim(u,v)·(r_v,i - v̄) ] / [ Σ |sim(u,v)| ]
-    
-    Parámetros:
-    -----------
-    min_neighbors_for_pred : int
-        Mínimo de vecinos que deben haber calificado una película para
-        generar una predicción confiable. Evita predicciones basadas en 1-2 usuarios.
-    
-    Retorna:
-    --------
-    dict { movieId: predicted_rating }
+    Predice la calificación de una película para el usuario objetivo.
+    Usa vecinos ponderados y corrección por media centrada.
     """
-    if target_user not in user_ratings:
-        raise ValueError("Usuario no encontrado en el dataset.")
     if not neighbors:
-        return {}
+        return 0.0
 
-    target_rated = set(user_ratings[target_user].keys())
-    target_avg = np.mean(list(user_ratings[target_user].values()))
+    target_mean = np.mean(list(user_ratings[target_user].values()))
+    numerator = 0.0
+    denominator = 0.0
 
-    # 1. Recopilar candidatas: todas las películas de los vecinos
-    candidate_movies = set()
-    for neighbor_id, _, _ in neighbors:
-        candidate_movies.update(user_ratings.get(neighbor_id, {}).keys())
+    for neighbor_id, sim, _ in neighbors:
+        if movie_id in user_ratings[neighbor_id]:
+            neighbor_mean = np.mean(list(user_ratings[neighbor_id].values()))
+            # (calificación_vecino - su_media) * similitud
+            numerator += sim * (user_ratings[neighbor_id][movie_id] - neighbor_mean)
+            denominator += abs(sim)
 
-    # 2. Excluir las que el usuario YA calificó
-    candidate_movies -= target_rated
+    if denominator == 0:
+        return round(target_mean, 2)  # Fallback: su propio promedio
 
-    predictions = {}
-    for movie in candidate_movies:
-        num, den = 0.0, 0.0
-        neighbors_considered = 0
-
-        for neighbor_id, sim, _ in neighbors:
-            if movie in user_ratings.get(neighbor_id, {}):
-                neighbor_avg = np.mean(list(user_ratings[neighbor_id].values()))
-                # Contribución del vecino (centrada en su media)
-                num += sim * (user_ratings[neighbor_id][movie] - neighbor_avg)
-                den += abs(sim)
-                neighbors_considered += 1
-
-        # 3. Validar soporte mínimo y calcular predicción
-        if den > 0 and neighbors_considered >= min_neighbors_for_pred:
-            pred = target_avg + (num / den)
-            # Clip para mantener en rango realista del dataset [1.0, 5.0]
-            predictions[movie] = float(np.clip(pred, 1.0, 5.0))
-
-    return predictions
+    predicted = target_mean + (numerator / denominator)
+    return round(np.clip(predicted, 1.0, 5.0), 2)  # Limitar a rango [1, 5]
 
 
 def get_recommendations(
     target_user: int,
     user_ratings: dict,
-    neighbors: list[tuple],
-    threshold: float = 3.0,
-    top_n: int = 10,
-    min_neighbors_for_pred: int = 3,
-    movie_titles: dict = None
-) -> list[tuple]:
+    movie_titles: dict,
+    k: int = 30,
+    min_common: int = 5,
+    metric: str = "pearson",
+    top_n: int = 10
+) -> list[tuple[str, float]]:
     """
-    Genera recomendaciones filtrando por umbral y ordenando por predicción.
-    
-    Retorna:
-    --------
-    lista de tuplas [(movieId o título, predicción), ...]
+    Genera las top_N recomendaciones para un usuario.
+    Retorna: [(título_película, predicción), ...]
     """
-    preds = predict_ratings_for_user(
-        target_user, user_ratings, neighbors, min_neighbors_for_pred
+    # 1. Obtener vecinos más similares
+    neighbors = find_similar_users(
+        target_user, user_ratings, metric=metric, k=k, min_common=min_common
     )
-    
-    # Filtrar por umbral (> threshold)
-    filtered = [(mid, pred) for mid, pred in preds.items() if pred > threshold]
-    
-    # Ordenar descendente por predicción
-    filtered.sort(key=lambda x: x[1], reverse=True)
-    
-    # Tomar top-N
-    top_recs = filtered[:top_n]
-    
-    # Mapear a títulos si se proporciona el diccionario
-    if movie_titles:
-        return [(movie_titles.get(mid, f"Desconocida ({mid})"), round(pred, 2)) for mid, pred in top_recs]
-    
-    return [(mid, round(pred, 2)) for mid, pred in top_recs]
+
+    if not neighbors:
+        print("No se encontraron vecinos válidos.")
+        return []
+
+    # 2. Identificar películas NO vistas por el usuario objetivo
+    target_movies = set(user_ratings[target_user].keys())
+    all_movies = set()
+    for u_ratings in user_ratings.values():
+        all_movies.update(u_ratings.keys())
+    unseen_movies = all_movies - target_movies
+
+    # 3. Predecir calificación para cada película no vista
+    predictions = []
+    for movie_id in unseen_movies:
+        pred = predict_rating_mean_centered(target_user, movie_id, user_ratings, neighbors)
+        if pred > 0:  # Solo guardar si hay predicción válida
+            title = movie_titles.get(movie_id, f"ID: {movie_id}")
+            predictions.append((title, pred))
+
+    # 4. Ordenar por predicción descendente y retornar top_N
+    predictions.sort(key=lambda x: x[1], reverse=True)
+    return predictions[:top_n]

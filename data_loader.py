@@ -22,7 +22,13 @@ def build_user_ratings(df: pd.DataFrame) -> dict:
     Esta estructura es más eficiente para calcular similitudes
     porque evita iterar sobre películas que ningún usuario calificó.
     """
-    user_ratings = defaultdict(dict)
+    user_ratings = defaultdict(dict) # ayuda a crear diccionarios facilmente
     for row in df.itertuples(index=False):
         user_ratings[row.userId][row.movieId] = float(row.rating)
     return dict(user_ratings)
+
+def load_movie_titles(movies_path: str) -> dict:
+    """Carga título -> movieId (opcional, para legibilidad)"""
+
+    df = pd.read_csv(movies_path, sep=",")
+    return dict(zip(df["movieId"], df["title"]))
