@@ -1,75 +1,96 @@
-# prediction.py
 import numpy as np
-from knn import find_similar_users
+from knn import encontrar_usuarios_similares
 
-def predict_rating_mean_centered(
-    target_user: int,
-    movie_id: int,
-    user_ratings: dict,
-    neighbors: list[tuple]
-) -> float:
+# 4. PREDICCIÓN (CON FILTRO DE SOPORTE)
+
+def predecir_nota_centrada_media(
+    usuario_objetivo: int,
+    id_pelicula: int,
+    historial_global: dict,
+    vecinos: list[tuple]
+) -> tuple[float, int]:
     """
-    Predice la calificación de una película para el usuario objetivo.
-    Usa vecinos ponderados y corrección por media centrada.
+    Retorna tupla: (predicción_final, cantidad_de_vecinos_que_la_vieron)
     """
-    if not neighbors:
-        return 0.0
+    if not vecinos:
+        return 0.0, 0
 
-    target_mean = np.mean(list(user_ratings[target_user].values()))
-    numerator = 0.0
-    denominator = 0.0
+    # FIX CRÍTICO: Extraemos específicamente las 'notas' del diccionario para sacar el promedio
+    notas_objetivo = [datos['nota'] for datos in historial_global[usuario_objetivo].values()]
+    media_objetivo = np.mean(notas_objetivo)
+    
+    numerador = 0.0
+    denominador = 0.0
+    conteo_soporte = 0
 
-    for neighbor_id, sim, _ in neighbors:
-        if movie_id in user_ratings[neighbor_id]:
-            neighbor_mean = np.mean(list(user_ratings[neighbor_id].values()))
-            # (calificación_vecino - su_media) * similitud
-            numerator += sim * (user_ratings[neighbor_id][movie_id] - neighbor_mean)
-            denominator += abs(sim)
+    for id_vecino, similitud, _ in vecinos:
+        if id_pelicula in historial_global[id_vecino]:
+            conteo_soporte += 1
+            
+            # Calculamos la media de ese vecino
+            notas_vecino = [datos['nota'] for datos in historial_global[id_vecino].values()]
+            media_vecino = np.mean(notas_vecino)
+            
+            # Extraemos la nota específica que le dio a esta película
+            nota_vecino = historial_global[id_vecino][id_pelicula]['nota']
+            
+            numerador += similitud * (nota_vecino - media_vecino)
+            denominador += abs(similitud)
 
-    if denominator == 0:
-        return round(target_mean, 2)  # Fallback: su propio promedio
+    # Si ningún vecino la vio, no forzamos un falso promedio, descartamos la peli.
+    if denominador == 0 or conteo_soporte == 0:
+        return 0.0, 0
 
-    predicted = target_mean + (numerator / denominator)
-    return round(np.clip(predicted, 1.0, 5.0), 2)  # Limitar a rango [1, 5]
+    prediccion = media_objetivo + (numerador / denominador)
+    return float(np.clip(prediccion, 1.0, 5.0)), conteo_soporte
 
 
-def get_recommendations(
-    target_user: int,
-    user_ratings: dict,
-    movie_titles: dict,
-    k: int = 30,
-    min_common: int = 5,
-    metric: str = "pearson",
-    top_n: int = 10
-) -> list[tuple[str, float]]:
-    """
-    Genera las top_N recomendaciones para un usuario.
-    Retorna: [(título_película, predicción), ...]
-    """
-    # 1. Obtener vecinos más similares
-    neighbors = find_similar_users(
-        target_user, user_ratings, metric=metric, k=k, min_common=min_common
+def generar_recomendaciones(
+    usuario_objetivo: int,
+    historial_global: dict,
+    catalogo: dict,
+    k_vecinos: int = 30,
+    min_comunes: int = 5,
+    metrica: str = "pearson",
+    limite_top: int = 10,
+    min_soporte: int = 2  # Filtro para evitar anomalías (Películas con 1 solo voto de 5.0)
+) -> list[dict]:
+    
+    # 1. Obtenemos los mejores vecinos usando nuestra nueva función importada
+    vecinos = encontrar_usuarios_similares(
+        usuario_objetivo, historial_global, metrica=metrica, k_vecinos=k_vecinos, min_comunes=min_comunes
     )
 
-    if not neighbors:
+    if not vecinos:
         print("No se encontraron vecinos válidos.")
         return []
 
-    # 2. Identificar películas NO vistas por el usuario objetivo
-    target_movies = set(user_ratings[target_user].keys())
-    all_movies = set()
-    for u_ratings in user_ratings.values():
-        all_movies.update(u_ratings.keys())
-    unseen_movies = all_movies - target_movies
+    peliculas_vistas = set(historial_global[usuario_objetivo].keys())
+    
+    # OPTIMIZACIÓN EXTREMA: Recopilar SOLO las películas que vieron los VECINOS
+    candidatas = set()
+    for id_vecino, _, _ in vecinos:
+        candidatas.update(historial_global[id_vecino].keys())
+        
+    candidatas_no_vistas = candidatas - peliculas_vistas
 
-    # 3. Predecir calificación para cada película no vista
-    predictions = []
-    for movie_id in unseen_movies:
-        pred = predict_rating_mean_centered(target_user, movie_id, user_ratings, neighbors)
-        if pred > 0:  # Solo guardar si hay predicción válida
-            title = movie_titles.get(movie_id, f"ID: {movie_id}")
-            predictions.append((title, pred))
+    predicciones = []
+    for id_pelicula in candidatas_no_vistas:
+        pred, soporte = predecir_nota_centrada_media(
+            usuario_objetivo, id_pelicula, historial_global, vecinos
+        )
+        
+        # Exigir nota válida y respaldo mínimo de la comunidad
+        if pred > 0 and soporte >= min_soporte:
+            # Extraemos el título de nuestro nuevo diccionario de catálogo (o mostramos el ID si falla)
+            titulo = catalogo.get(id_pelicula, {}).get('titulo', f"ID: {id_pelicula}")
+            
+            predicciones.append({
+                "titulo": titulo,
+                "prediccion": round(pred, 2), # Redondeo SOLO para la vista del usuario
+                "soporte": soporte
+            })
 
-    # 4. Ordenar por predicción descendente y retornar top_N
-    predictions.sort(key=lambda x: x[1], reverse=True)
-    return predictions[:top_n]
+    # Ordenamos de mayor a menor predicción
+    predicciones.sort(key=lambda x: x["prediccion"], reverse=True)
+    return predicciones[:limite_top]

@@ -1,62 +1,47 @@
-from similarity import METRICS, get_common_movies
+from similarity import METRICAS_SIMILITUD, obtener_peliculas_comunes
 
 # ─────────────────────────────────────────────
-# 3. KNN DESDE CERO
+# 3. KNN DESDE CERO (OPTIMIZADO Y EN ESPAÑOL)
 # ─────────────────────────────────────────────
 
-def find_similar_users(
-    target_user: int,
-    user_ratings: dict,
-    metric: str = "pearson",
-    k: int = 10,
-    min_common: int = 0,
+def encontrar_usuarios_similares(
+    usuario_objetivo: int,
+    historial_global: dict,
+    metrica: str = "pearson",
+    k_vecinos: int = 10,
+    min_comunes: int = 0,
 ) -> list[tuple]:
     """
-    Encuentra los K usuarios más similares al usuario objetivo.
-    Implementación manual de KNN.
-
-    Parámetros:
-    -----------
-    target_user : int
-        ID del usuario del que queremos encontrar vecinos.
-    user_ratings : dict
-        Diccionario { userId: { movieId: rating ... } ... }
-    metric : str
-        Métrica a usar: 'cosine', 'euclidean' o 'pearson'
-    k : int
-        Número de vecinos a retornar
-    min_common : int
-        Mínimo de películas en común para considerar el par válido.
-        Pares con menos películas comunes son poco confiables.
-
-    Retorna:
-    --------
-    Lista de tuplas (userId, similitud, películas_comunes)
-    ordenada de mayor a menor similitud.
+    Calcula la similitud del usuario objetivo con el resto y retorna los K más similares.
     """
-    if target_user not in user_ratings:
-        raise ValueError(f"Usuario {target_user} no encontrado en el dataset.")
+    if usuario_objetivo not in historial_global:
+        raise ValueError(f"Usuario {usuario_objetivo} no encontrado en el dataset.")
 
-    sim_fn = METRICS.get(metric)
-    if sim_fn is None:
-        raise ValueError(f"Métrica '{metric}' no válida. Opciones: {list(METRICS.keys())}")
+    # Obtenemos la función matemática correspondiente desde similarity.py
+    funcion_similitud = METRICAS_SIMILITUD.get(metrica)
+    if funcion_similitud is None:
+        raise ValueError(f"Métrica '{metrica}' no válida. Opciones: {list(METRICAS_SIMILITUD.keys())}")
 
-    target_ratings = user_ratings[target_user]
-    similarities = []
+    perfil_objetivo = historial_global[usuario_objetivo]
+    similitudes = []
 
-    for other_user, other_ratings in user_ratings.items():
-        if other_user == target_user:
+    for otro_usuario, perfil_otro in historial_global.items():
+        if otro_usuario == usuario_objetivo:
             continue
 
-        # Filtro mínimo de películas comunes
-        common = get_common_movies(target_ratings, other_ratings)
-        if len(common) < min_common:
+        # Verificamos que tengan al menos el mínimo de películas en común (Soporte)
+        comunes = obtener_peliculas_comunes(perfil_objetivo, perfil_otro)
+        if len(comunes) < min_comunes:
             continue
 
-        sim = sim_fn(target_ratings, other_ratings)
-        similarities.append((other_user, round(sim, 4), len(common)))
+        # Calculamos el nivel de similitud entre -1.0 y 1.0 (o 0.0 y 1.0)
+        similitud = funcion_similitud(perfil_objetivo, perfil_otro)
+        
+        # Mantenemos la precisión máxima sin redondear prematuramente
+        similitudes.append((otro_usuario, similitud, len(comunes)))
 
-    # Ordenar por similitud descendente (KNN: los K más cercanos)
-    similarities.sort(key=lambda x: x[1], reverse=True)
-
-    return similarities[:k]
+    # PASO DEL PIZARRÓN: Ordenamos los usuarios de mayor a menor similitud
+    similitudes.sort(key=lambda x: x[1], reverse=True)
+    
+    # SALIDA: Retornamos únicamente los K vecinos más cercanos
+    return similitudes[:k_vecinos]
