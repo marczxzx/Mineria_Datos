@@ -95,16 +95,30 @@ def graficar_perfil_pastel(usuario_objetivo: int, historial_global: dict, catalo
     plt.show()
  
 def graficar_similitud_vecinos(usuario_objetivo: int, vecinos: list, metrica: str):
+    """
+    Muestra los Top-K vecinos más similares.
+    ¡AHORA DESTACA AL BOT (999999) EN ROJO PARA LA PRESENTACIÓN!
+    """
     if not vecinos:
         print("No hay vecinos válidos para graficar similitud.")
         return
 
-    # 1. Extraer datos del K-NN (IDs y Similitudes puras)
+    # 1. Extraer datos
     vecinos_ids = [str(res[0]) for res in vecinos]
     similitudes = [res[1] for res in vecinos]
     k_vecinos = len(vecinos)
 
-    # 2. Configurar la métrica para el título profesional
+    # --- TRUCO VISUAL PARA EL BOT ---
+    colores_barras = []
+    etiquetas_x = []
+    for vid in vecinos_ids:
+        if vid == '999999':
+            colores_barras.append('#e74c3c') # Rojo fuego para el Bot
+            etiquetas_x.append('BOT\n(999999)') # Etiqueta clara
+        else:
+            colores_barras.append(COLOR_BARRA_SIM) # Verde normal
+            etiquetas_x.append(vid)
+
     nombres_metricas = {
         "coseno":    "Coseno",
         "euclidiana": "Euclidiana (1/(1+d))",
@@ -113,24 +127,18 @@ def graficar_similitud_vecinos(usuario_objetivo: int, vecinos: list, metrica: st
     }
     label_metrica = nombres_metricas.get(metrica, metrica.capitalize())
 
-    # 3. Crear gráfica (aspecto profesional con fondo blanco y grilla)
+    # 3. Crear gráfica
     fig, ax = plt.subplots(figsize=(10, 5), num=f"K-NN Usuario {usuario_objetivo}")
     fig.patch.set_facecolor('white') 
     
-    # Crear barras verticales
-    bars = ax.bar(vecinos_ids, similitudes, color=COLOR_BARRA_SIM, edgecolor='black', alpha=0.9)
+    # Usamos nuestra lista de colores y etiquetas personalizadas
+    bars = ax.bar(etiquetas_x, similitudes, color=colores_barras, edgecolor='black', alpha=0.9)
     
-    # Títulos y Ejes Profesional
     ax.set_title(f'Resultados K-NN ({k_vecinos} vecinos) - Métrica: {label_metrica}', **TITULO_FONT)
     ax.set_ylabel('Grado de Similitud (-1 a 1)', **ETIQUETA_FONT)
     ax.set_xlabel('ID de Usuario (Vecinos)', **ETIQUETA_FONT)
     
-    # ───────────────────────────────────────────────────
-    # 🚀 FIX: AÑADIR MARGEN SUPERIOR (SOLUCIÓN)
-    # ───────────────────────────────────────────────────
-    # Cambiamos el límite superior de 1.0 a 1.1 para dar "aire" a los números.
     ax.set_ylim(-1.0, 1.1) 
-    
     ticks_y = np.arange(-1.0, 1.01, 0.25)
     ax.set_yticks(ticks_y)
     
@@ -138,7 +146,6 @@ def graficar_similitud_vecinos(usuario_objetivo: int, vecinos: list, metrica: st
     ax.axhline(0, color='black', linewidth=1) 
     ax.set_axisbelow(True) 
     
-    # Añadir valores exactos sobre las barras
     for bar in bars:
         height = bar.get_height()
         va_pos = 'bottom' if height >= 0 else 'top'
