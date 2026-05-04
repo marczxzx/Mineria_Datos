@@ -1,7 +1,7 @@
 ## Instalar librerías necesarias:
 ```
 pip install --upgrade pip
-pip install pandas numpy matplotlib seaborn scikit-learn scipy folium streamlit streamlit-folium
+pip install pandas numpy matplotlib seaborn scikit-learn scipy folium streamlit streamlit-folium plotly
 ```
 ## Ejecución de la aplicación
 ### Desde la carpeta del proyecto, correr:
